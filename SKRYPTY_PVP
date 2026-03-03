@@ -1108,11 +1108,6 @@ end
 
 
 -- SPAM SSA/MIGHT RING
--- deklaracje (żeby na pewno nie było nil)
-local ringssy
-local openNextSSABp
-local openNextMightBp
-
 local ringssy = macro(1, "SPAM SS / MRING", function()  -- tworzy makro działające co 1 ms, zapisane w zmiennej ringssy
     local findStoneSkin = findItem(3081)  -- szuka w otwartych kontenerach itemu ID 3081 (Stone Skin Amulet)
     local findKoshei = findItem(9302)     -- szuka itemu ID 9302 (Koshei)
@@ -1177,8 +1172,6 @@ end)
 
 addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)
   ringssy:setOn(isOn)
-  openNextSSABp:setOn(isOn)
-  openNextMightBp:setOn(isOn)
 end)
 
 
