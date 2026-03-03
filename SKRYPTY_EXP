@@ -1,0 +1,115 @@
+setDefaultTab("EXP")
+
+local TAB_NAME = "EXP"
+local KOLOR = "#ffff00"
+
+local function znajdzPierwszyZTekstem(widget, szukany)
+  if not widget then return nil end
+  if widget.getText and widget:getText() == szukany then return widget end
+  for _, ch in ipairs(widget:getChildren() or {}) do
+    local f = znajdzPierwszyZTekstem(ch, szukany)
+    if f then return f end
+  end
+  return nil
+end
+
+local function wymusKolor(tabBtn)
+  if tabBtn and tabBtn.setColor then
+    tabBtn:setColor(KOLOR)
+  end
+end
+
+schedule(200, function()
+  local root = g_ui.getRootWidget()
+  local tabBtn = znajdzPierwszyZTekstem(root, TAB_NAME)
+  if not tabBtn then return end
+
+  wymusKolor(tabBtn)
+
+  tabBtn.onStyleApply = function(widget)
+    wymusKolor(widget)
+  end
+
+  if tabBtn.onHoverChange ~= nil then
+    tabBtn.onHoverChange = function(widget, hovered)
+      wymusKolor(widget)
+    end
+  end
+end)  
+
+-- FWB RENEW
+
+local BOOTS_ID = 9020
+local fireEnabled = false
+fireBootsMacro = macro(100, "FIRE RENEW", function()
+  local boots = getFeet()
+  if boots and boots:getId() == BOOTS_ID then
+    if not fireEnabled then
+      say("!fire")
+      fireEnabled = true
+    end
+  else
+    fireEnabled = false
+  end
+end)
+
+-- SOFT RENEW
+
+local BOOTS_ID = 6530
+local softEnabled = false
+softBootsMacro = macro(100, "SOFT RENEW", function()
+  local boots = getFeet()
+  if boots and boots:getId() == BOOTS_ID then
+    if not softEnabled then
+      say("!soft")
+      softEnabled = true
+    end
+  else
+    softEnabled = false
+  end
+end)
+
+-- MANA TRAIN
+
+local SPELL = "utana vid"
+local MIN_MANA = 440
+
+macro(100, "MANA TRAIN", function()
+  if mana() < MIN_MANA then return end
+  say(SPELL)
+end)
+
+-- NIE POTUJE KIEDY LOOTUJE
+
+vBot = vBot or {}
+storage.extras = storage.extras or {}
+
+if storage.extras.noPotionsWhileLooting == nil then
+  storage.extras.noPotionsWhileLooting = true
+end
+vBot.noPotionsWhileLooting = storage.extras.noPotionsWhileLooting
+
+local ui = setupUI([[
+Panel
+  height: 19
+
+  BotSwitch
+    id: noPots
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-align: center
+    !text: tr('NIE POTUJE JAK LOOTUJE')
+    font: verdana-11px-rounded
+]])
+
+ui.noPots:setOn(storage.extras.noPotionsWhileLooting)
+
+ui.noPots.onClick = function(widget)
+  local enabled = not widget:isOn()
+  widget:setOn(enabled)
+
+  vBot.noPotionsWhileLooting = enabled
+  storage.extras.noPotionsWhileLooting = enabled
+
+  warn("Nie potuje kiedy lootuje: " .. (enabled and "ON" or "OFF"))
+end
