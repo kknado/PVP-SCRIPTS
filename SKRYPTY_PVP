@@ -1175,6 +1175,42 @@ addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)
     ringssy.setOn(isOn)  
 end)
 
+
+-- OPEN SSA/MIGHT RING BACKPACKS
+macro(10, "OPEN NEXT SSA BP", function()
+  local bpToOpen = 2870
+  for i, container in pairs(getContainers()) do 
+    containerItemId = container:getContainerItem():getId() 
+    if containerItemId == bpToOpen then 
+      if container:getItemsCount() == 1 then 
+        for _, item in ipairs(container:getItems()) do 
+          if item:isContainer() then 
+            g_game.open(item, container) 
+          end
+        end
+      end
+    end
+  end
+end)
+
+
+
+macro(10, "OPEN NEXT MIGHT BP", function()
+  local bpToOpen = 2871
+  for i, container in pairs(getContainers()) do 
+    containerItemId = container:getContainerItem():getId() 
+    if containerItemId == bpToOpen then 
+      if container:getItemsCount() == 1 then 
+        for _, item in ipairs(container:getItems()) do 
+          if item:isContainer() then 
+            g_game.open(item, container) 
+          end
+        end
+      end
+    end
+  end
+end)
+
 -- SPRAWDZ SE PROFESJE
 
 local myVocation
