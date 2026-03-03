@@ -1360,11 +1360,8 @@ local exivaMacro = macro(1500, "Exiva Commander", function()
 end)
 
 -- MW STEP
-
-  local toggle = macro(10, "MWStep", function() end) -- taca mw no sqm anterior
-
-  addIcon("Mwall Step", {text="MWStep", item={id = 3180, count = 1}}--[[ icon options ]], toggle)
-  
+local toggle = macro(10, "MWStep", function() end) -- taca mw no sqm anterior
+addIcon("Mwall Step", {text="MWStep", item={id = 3180, count = 1}}--[[ icon options ]], toggle)
   onPlayerPositionChange(function(newPos, oldPos)
       if oldPos.z ~= posz() then return end
       if oldPos then
