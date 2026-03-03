@@ -1171,8 +1171,10 @@ local ringssy = macro(1, "SPAM SS / MRING", function()  -- tworzy makro działaj
     end
 end)  
 
-addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)  
-    ringssy.setOn(isOn)  
+addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)
+  ringssy:setOn(isOn)
+  openNextSSABp:setOn(isOn)
+  openNextMightBp:setOn(isOn)
 end)
 
 
