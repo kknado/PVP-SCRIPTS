@@ -1109,70 +1109,83 @@ end
 
 -- SPAM SSA/MIGHT RING
 
-local ringssy = macro(1, "SPAM SS / MRING", function()  -- tworzy makro działające co 1 ms, zapisane w zmiennej ringssy
-    local findStoneSkin = findItem(3081)  -- szuka w otwartych kontenerach itemu ID 3081 (Stone Skin Amulet)
-    local findKoshei = findItem(9302)     -- szuka itemu ID 9302 (Koshei)
-    local findring = findItem(9593)       -- szuka ringa ID 9593
-    local findmind = findItem(3048)       -- szuka Might Ringa ID 3048
-    local backpackSlot = {x=65535, y=SlotBackpack, z=0}  -- pozycja techniczna wskazująca slot głównego plecaka
+local ringssy = macro(1, "SPAM SS / MRING", function()
+  local findStoneSkin = findItem(3081)
+  local findKoshei = findItem(9302)
+  local findring = findItem(9593)
+  local findmind = findItem(3048)
+  local backpackSlot = {x=65535, y=SlotBackpack, z=0}
 
-    if findStoneSkin and (not getNeck() or getNeck():getId() ~= 3081) then  
-        -- jeśli SSA istnieje ORAZ nie masz go założonego
-
-        if getNeck() then  
-            -- jeśli masz aktualnie założony jakiś amulet
-
-            g_game.move(getNeck(), backpackSlot, 1)  
-            -- zdejmuje aktualny amulet i przenosi go do głównego plecaka
-        end
-
-        moveToSlot(findStoneSkin, SlotNeck)  
-        -- zakłada Stone Skin Amulet do slotu amuletu
-
-    elseif not findStoneSkin and findKoshei and (not getNeck() or getNeck():getId() ~= 9802) then  
-        -- jeśli NIE ma SSA, ale jest Koshei i nie masz go założonego
-
-        if getNeck() then  
-            -- jeśli masz aktualnie założony jakiś amulet
-
-            g_game.move(getNeck(), backpackSlot, 1)  
-            -- zdejmuje obecny amulet do plecaka
-        end
-
-        moveToSlot(findKoshei, SlotNeck)  
-        -- zakłada Koshei do slotu amuletu
+  if findStoneSkin and (not getNeck() or getNeck():getId() ~= 3081) then
+    if getNeck() then
+      g_game.move(getNeck(), backpackSlot, 1)
     end
+    moveToSlot(findStoneSkin, SlotNeck)
 
-    if findmind and (not getFinger() or getFinger():getId() ~= 3048) then  
-        -- jeśli jest Might Ring i nie masz go założonego
-
-        if getFinger() then  
-            -- jeśli masz założony jakiś ring
-
-            g_game.move(getFinger(), backpackSlot, 1)  
-            -- zdejmuje aktualny ring i odkłada go do plecaka
-        end
-
-        moveToSlot(findmind, SlotFinger)  
-        -- zakłada Might Ring do slotu ringa
-
-    elseif not findmind and findring and (not getFinger() or getFinger():getId() ~= 9593) then  
-        -- jeśli NIE ma Might Ringa, ale jest ring 9593 i nie masz go założonego
-
-        if getFinger() then  
-            -- jeśli masz założony jakiś ring
-
-            g_game.move(getFinger(), backpackSlot, 1)  
-            -- zdejmuje obecny ring do plecaka
-        end
-
-        moveToSlot(findring, SlotFinger)  
-        -- zakłada ring 9593 do slotu ringa
+  elseif not findStoneSkin and findKoshei and (not getNeck() or getNeck():getId() ~= 9802) then
+    if getNeck() then
+      g_game.move(getNeck(), backpackSlot, 1)
     end
-end)  
+    moveToSlot(findKoshei, SlotNeck)
+  end
 
-addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)  
-    ringssy.setOn(isOn)  
+  if findmind and (not getFinger() or getFinger():getId() ~= 3048) then
+    if getFinger() then
+      g_game.move(getFinger(), backpackSlot, 1)
+    end
+    moveToSlot(findmind, SlotFinger)
+
+  elseif not findmind and findring and (not getFinger() or getFinger():getId() ~= 9593) then
+    if getFinger() then
+      g_game.move(getFinger(), backpackSlot, 1)
+    end
+    moveToSlot(findring, SlotFinger)
+  end
+end)
+
+-- OPEN NEXT SSA BP (musi byc w zmiennej, zeby dac setOn)
+local openNextSSABp = macro(10, "OPEN NEXT SSA BP", function()
+  local bpToOpen = 2870
+  for _, container in pairs(getContainers()) do
+    local containerItemId = container:getContainerItem():getId()
+    if containerItemId == bpToOpen then
+      if container:getItemsCount() == 1 then
+        for _, item in ipairs(container:getItems()) do
+          if item:isContainer() then
+            g_game.open(item, container)
+          end
+        end
+      end
+    end
+  end
+end)
+
+-- OPEN NEXT MIGHT BP (musi byc w zmiennej, zeby dac setOn)
+local openNextMightBp = macro(10, "OPEN NEXT MIGHT BP", function()
+  local bpToOpen = 2871
+  for _, container in pairs(getContainers()) do
+    local containerItemId = container:getContainerItem():getId()
+    if containerItemId == bpToOpen then
+      if container:getItemsCount() == 1 then
+        for _, item in ipairs(container:getItems()) do
+          if item:isContainer() then
+            g_game.open(item, container)
+          end
+        end
+      end
+    end
+  end
+end)
+
+-- startowo OFF (beda wlaczane razem z ringssy)
+openNextSSABp.setOn(false)
+openNextMightBp.setOn(false)
+
+-- jeden przelacznik wlacza 3 makra naraz
+addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)
+  ringssy.setOn(isOn)
+  openNextSSABp.setOn(isOn)
+  openNextMightBp.setOn(isOn)
 end)
 
 -- SPRAWDZ SE PROFESJE
@@ -1317,8 +1330,264 @@ addTextEdit("", storage.Commander or "", function(_, text)
 end)
 
 -- Exiva Commander Macro
-local exivaMacro = macro(1500, "Exiva Commander", function()
+local exivaMacro = macro(1500, "EXIVA COMMANDER", function()
     if hppercent() > 80 and manapercent() > 80 and not isParalyzed() then
         say("exiva \"" .. storage.Commander)
     end
+end)
+
+-- ANTI PUSH Z DESTRO
+
+local dropItems = {3035, 3031}
+local dropQuantities = {2, 2} -- Adjusted quantities
+local dropDelay = 50
+local fields = {2121, 2123, 2126}
+local destroyField = 3148
+gpAntiPushDrop = macro(dropDelay, function()
+    antiPush()
+end)
+
+addIcon("Anti Push", {text = "AntPush", item = {id = 3734, count = 1}}, gpAntiPushDrop)
+
+onPlayerPositionChange(function()
+    antiPush()
+end)
+
+function antiPush()
+    if gpAntiPushDrop:isOff() then
+        return
+    end
+
+    local tile = g_map.getTile(pos())
+if tile and gpAntiPushDrop:isOn() then
+    local topThing = tile:getTopThing()
+    local topId = topThing and topThing:getId() or 0
+
+    -- jesli pod toba juz lezy gold albo plat, to NIE rzucaj ponownie
+    if topId ~= 3031 and topId ~= 3035 then
+        for i, itemId in ipairs(dropItems) do
+            local dropItem = findItem(itemId)
+            if dropItem then
+                g_game.move(dropItem, pos(), dropQuantities[i])
+            end
+        end
+    end
+end
+for i, container in pairs(getContainers()) do
+        containerItemId = container:getContainerItem():getId()
+        if containerItemId then
+            local plats = findItem(3035)
+            local goldcoins = findItem(3031)
+            if not plats then
+                use(3043)
+            end
+            if not goldcoins then
+                use(3035)
+            end
+        end
+    end
+
+    local tileArroundMe = getUnderTiles(pos())
+    for _, tile in ipairs(tileArroundMe) do
+        if table.contains(fields, tile:getTopUseThing():getId()) and manapercent() >= 80 then
+            useWith(destroyField, tile:getTopUseThing())
+            delay(100)
+        end
+    end
+end
+
+function getUnderTiles(pos)
+    if type(pos) ~= "table" then
+        pos = pos:getPosition()
+    end
+
+    local tiles = {}
+    local dirs = {
+        {0, 0}
+    }
+    for i = 1, #dirs do
+        local tile = g_map.getTile({
+            x = pos.x - dirs[i][1],
+            y = pos.y - dirs[i][2],
+            z = pos.z
+        })
+        if tile then
+            table.insert(tiles, tile)
+        end
+    end
+
+    return tiles
+end
+
+hotkey("end", function()
+    if gpAntiPushDrop.isOff() then
+        gpAntiPushDrop.setOn()
+    else
+        gpAntiPushDrop.setOff()
+    end
+end)
+
+openBackpacks = function()
+   for _, container in pairs(g_game.getContainers()) do
+        g_game.close(container)
+   end
+    schedule(1000, function()
+        bpItem = getBack()
+        if bpItem ~= nil then g_game.open(bpItem) end
+    end)
+
+    schedule(2000, function()
+        local nextContainers = {}
+        containers = getContainers()
+        for i, container in pairs(g_game.getContainers()) do
+            for i, item in ipairs(container:getItems()) do
+                if item:isContainer() then
+                    table.insert(nextContainers, item)
+                end
+            end
+            if #nextContainers == 0 then return end
+            local delay = 1
+            for i = 1, #nextContainers do
+                schedule(delay, function()
+                    g_game.open(nextContainers[i], nil)
+                end)
+                delay = delay + 250
+            end
+        end
+    end)
+end
+
+-- this loads the function straighta way when reloading config
+openBackpacks()
+-- this adds a button to your bot, so you can press it
+UI.Button("BACKPACK OPEN", function()
+    openBackpacks()
+end)
+
+-- DESTRO POD DUPE
+
+local fields = {2121, 2123, 2126, 2124}
+local DESTRO_ID = 3148
+local MIN_MANA_PERCENT = 80
+
+local destroPoRuchu = macro(100, "DESTRO POD DUPE", function() end)
+destroPoRuchu.setOff()
+
+onPlayerPositionChange(function(newPos, oldPos)
+  if not destroPoRuchu.isOn() then return end
+  if manapercent() < MIN_MANA_PERCENT then return end
+  if not oldPos then return end
+
+  local tile = g_map.getTile(oldPos)
+  if not tile then return end
+
+  local top = tile:getTopUseThing()
+  if not top then return end
+  if not table.contains(fields, top:getId()) then return end
+
+  useWith(DESTRO_ID, top)
+
+  destroPoRuchu.setOff()
+end)
+
+addIcon("DestroMove", {item={id = DESTRO_ID, count = 1}, text="DESTRO", movable=true}, destroPoRuchu)
+
+schedule(1, function()
+  destroPoRuchu.setOff()
+end)
+
+-- MW STEP
+
+local MW_ITEM_ID = 3180
+local MW_ON_TILE_1 = 2129
+local MW_ON_TILE_2 = 2128
+
+local toggle = macro(10, "MW STEP", function() end)
+
+local oznaczonyPos = nil
+local mwIcon = nil
+
+local function ustawIkone(on)
+  if not mwIcon then return end
+  if mwIcon.setOn then
+    pcall(function() mwIcon:setOn(on) end)
+    pcall(function() mwIcon.setOn(on) end)
+  end
+  if mwIcon.setChecked then
+    pcall(function() mwIcon:setChecked(on) end)
+    pcall(function() mwIcon.setChecked(on) end)
+  end
+end
+
+local function jestMWNaTile(tile)
+  if not tile then return false end
+  local thing = tile:getTopThing() or tile:getTopUseThing()
+  if not thing then return false end
+  local id = thing:getId()
+  return id == MW_ON_TILE_1 or id == MW_ON_TILE_2
+end
+
+local function wyczyscNapisJesliMW(pos)
+  local tile = g_map.getTile(pos)
+  if not tile then return end
+
+  if jestMWNaTile(tile) then
+    tile:setText("")
+    oznaczonyPos = nil
+    return
+  end
+
+  schedule(50, function()
+    wyczyscNapisJesliMW(pos)
+  end)
+end
+
+onPlayerPositionChange(function(newPos, oldPos)
+  if not oldPos then return end
+  if oldPos.z ~= posz() then return end
+  if not toggle:isOn() then return end
+  if not oznaczonyPos then return end
+
+  if oldPos.x ~= oznaczonyPos.x or oldPos.y ~= oznaczonyPos.y or oldPos.z ~= oznaczonyPos.z then
+    return
+  end
+
+  local tile = g_map.getTile(oldPos)
+  if not tile or not tile:isWalkable() then return end
+
+  useWith(MW_ITEM_ID, tile:getTopUseThing())
+
+  toggle:setOff()
+  ustawIkone(false)
+
+  wyczyscNapisJesliMW(oldPos)
+end)
+
+mwIcon = addIcon("Mwall Step", {text="MWStep", item={id = MW_ITEM_ID, count = 1}, movable=true}, function(icon, isOn)
+  toggle:setOn(isOn)
+
+  if isOn then
+    local p = pos()
+    local tile = g_map.getTile(p)
+    if tile then
+      tile:setText("MW", "#ff0000")
+      oznaczonyPos = {x = p.x, y = p.y, z = p.z}
+    end
+  else
+    if oznaczonyPos then
+      local t = g_map.getTile(oznaczonyPos)
+      if t then t:setText("") end
+      oznaczonyPos = nil
+    end
+  end
+end)
+
+schedule(1, function()
+  toggle:setOff()
+  ustawIkone(false)
+  if oznaczonyPos then
+    local t = g_map.getTile(oznaczonyPos)
+    if t then t:setText("") end
+    oznaczonyPos = nil
+  end
 end)
