@@ -1358,17 +1358,3 @@ local exivaMacro = macro(1500, "Exiva Commander", function()
         say("exiva \"" .. storage.Commander)
     end
 end)
-
--- MW STEP
-local toggle = macro(10, "MWStep", function() end) -- taca mw no sqm anterior
-addIcon("Mwall Step", {text="MWStep", item={id = 3180, count = 1}}--[[ icon options ]], toggle)
-  onPlayerPositionChange(function(newPos, oldPos)
-      if oldPos.z ~= posz() then return end
-      if oldPos then
-          local tile = g_map.getTile(oldPos)
-          if toggle.isOn() and tile:isWalkable() then
-              useWith(3180, tile:getTopUseThing())
-              toggle.setOff()
-          end
-      end
-  end)
