@@ -1,0 +1,1324 @@
+setDefaultTab("PVP")
+
+local TAB_NAME = "PVP"
+local KOLOR = "#ffff00"
+
+local function znajdzPierwszyZTekstem(widget, szukany)
+  if not widget then return nil end
+  if widget.getText and widget:getText() == szukany then return widget end
+  for _, ch in ipairs(widget:getChildren() or {}) do
+    local f = znajdzPierwszyZTekstem(ch, szukany)
+    if f then return f end
+  end
+  return nil
+end
+
+local function wymusKolor(tabBtn)
+  if tabBtn and tabBtn.setColor then
+    tabBtn:setColor(KOLOR)
+  end
+end
+
+schedule(200, function()
+  local root = g_ui.getRootWidget()
+  local tabBtn = znajdzPierwszyZTekstem(root, TAB_NAME)
+  if not tabBtn then return end
+
+  wymusKolor(tabBtn)
+
+  tabBtn.onStyleApply = function(widget)
+    wymusKolor(widget)
+  end
+
+  if tabBtn.onHoverChange ~= nil then
+    tabBtn.onHoverChange = function(widget, hovered)
+      wymusKolor(widget)
+    end
+  end
+end)
+
+
+-- Follow Player
+UI.Label("Follow Player:")
+leaderPositions = {}
+local leaderDirections = {}
+local leader
+local lastLeaderFloor
+local ropeId = 3003
+local standTime = now
+
+FloorChangers = {
+  RopeSpots = {
+    Up = {386},
+    Down = {}
+  },
+  
+  Use = {
+    Up = {1948, 5542, 16693, 16692, 1723, 7771, 9556, 5749, 1968, 4986, 6264, 8263, 9565, 2472, 5122, 5674, 1930, 4980, 5289, 8265},
+    Down = {435}
+  }
+}
+
+local function handleUse(pos)
+  local lastZ = posz()
+  if posz() == lastZ then
+    local newTile = g_map.getTile({x = pos.x, y = pos.y, z = pos.z})
+    if newTile then
+      g_game.use(newTile:getTopUseThing())
+    end
+  end
+end
+
+local function handleRope(pos)
+  local lastZ = posz()
+  if posz() == lastZ then
+    local newTile = g_map.getTile({x = pos.x, y = pos.y, z = pos.z})
+    if newTile then
+      useWith(ropeId, newTile:getTopUseThing())
+    end
+  end
+end
+
+local floorChangeSelector = {
+  RopeSpots = {Up = handleRope, Down = handleRope},
+  Use = {Up = handleUse, Down = handleUse}
+}
+
+local function distance(pos1, pos2)
+  local pos2 = pos2 or player:getPosition()
+  return math.abs(pos1.x - pos2.x) + math.abs(pos1.y - pos2.y)
+end
+
+local function executeClosest(possibilities)
+  local closest
+  local closestDistance = 99999
+  for _, data in ipairs(possibilities) do
+    local dist = distance(data.pos)
+    if dist < closestDistance then
+      closest = data
+      closestDistance = dist
+    end
+  end
+
+  if closest then
+    closest.changer(closest.pos)
+    return true
+  end
+  
+  return false
+end
+
+local function handleFloorChange()
+  local range = 1
+  local p = player:getPosition()
+  local possibleChangers = {}
+  for _, dir in ipairs({"Down", "Up"}) do
+    for changer, data in pairs(FloorChangers) do
+      for x = -range, range do
+        for y = -range, range do
+          local tile = g_map.getTile({x = p.x + x, y = p.y + y, z = p.z})
+          if tile and tile:getTopUseThing() then
+            if table.find(data[dir], tile:getTopUseThing():getId()) then
+              table.insert(possibleChangers, {changer = floorChangeSelector[changer][dir], pos = {x = p.x + x, y = p.y + y, z = p.z}})
+            end
+          end
+        end
+      end
+    end
+  end
+  if #possibleChangers > 0 then
+    return executeClosest(possibleChangers)
+  end
+  
+  return false
+end
+
+local function levitate(dir)
+  turn(dir)
+  schedule(200, function()
+    say('exani hur "down')
+    say('exani hur "up')
+  end)
+end
+
+local function handleUsing()
+  handleFloorChange()
+end
+
+local function getStandTime()
+  return now - standTime
+end
+
+local followLeaderTextEdit
+
+followLeaderTextEdit = UI.TextEdit(storage.followLeader or "Name", function(widget, text)
+  storage.followLeader = text
+  leader = getCreatureByName(text)
+end)
+
+ultimateFollow = macro(50, "Follow", function()
+  if not leader then
+    local leaderPos = leaderPositions[posz()]
+    if leaderPos and getDistanceBetween(player:getPosition(), leaderPos) > 0 then
+      autoWalk(leaderPos, 70, {ignoreNonPathable=true, precision=0})
+      delay(200)
+      return
+    end
+
+    if handleFloorChange() then
+      return
+    end
+    
+    local dir = leaderDirections[posz()]
+    if dir then
+      levitate(dir)
+    end
+  else
+    local lpos = leader:getPosition()
+    local parameters = {ignoreNonPathable=true, precision=1, ignoreCreatures=true}
+    local path = findPath(player:getPosition(), lpos, 40, parameters)
+    local distance = getDistanceBetween(player:getPosition(), lpos)
+    if distance > 1 and not path then
+      handleUsing()
+    elseif distance > 2 then
+      if getStandTime() > 500 then
+        autoWalk(lpos, 40, parameters)
+        delay(200)
+      end
+    end
+  end
+end)
+
+onCreaturePositionChange(function(creature, newPos, oldPos)
+  if ultimateFollow.isOff() then return end
+  
+  if creature:getName() == player:getName() then
+    standTime = now
+    return
+  end
+  
+  if creature:getName():lower() ~= storage.followLeader:lower() then return end
+  
+  if newPos then
+    leaderPositions[newPos.z] = newPos
+    lastLeaderFloor = newPos.z
+    if newPos.z == posz() then
+      leader = creature
+    else
+      leader = nil
+    end
+  else
+    leader = nil
+  end
+  
+  if oldPos then
+    if newPos and oldPos.z ~= newPos.z then
+      leaderDirections[oldPos.z] = creature:getDirection()
+    end
+  
+    local oldTile = g_map.getTile(oldPos)
+    local walkPrecision = 1
+    if oldTile then
+      if not oldTile:hasCreature() then
+        walkPrecision = 0
+      end
+    end    
+  
+    autoWalk(oldPos, 40, {ignoreNonPathable=1, precision=walkPrecision})
+  end
+end)
+
+onCreatureAppear(function(creature)
+  if ultimateFollow.isOff() then return end
+  if creature:getPosition().z ~= posz() then return end
+  
+  if creature:getName():lower() == storage.followLeader:lower() then
+    leader = creature
+  elseif creature:getName() == player:getName() then
+    if lastLeaderFloor and lastLeaderFloor == posz() then
+      leader = getCreatureByName(storage.followLeader)
+    end
+  end
+end)
+
+onCreatureDisappear(function(creature)
+  if ultimateFollow.isOff() then return end
+  if creature:getPosition().z == posz() then return end
+  
+  if creature:getName():lower() == storage.followLeader:lower() then
+    leader = nil
+  elseif creature:getName() == player:getName() and posz() ~= lastLeaderFloor then
+    leader = nil
+  end
+end)
+leader = getCreatureByName(storage.followLeader)
+
+local function displayCondition()
+  return true
+end
+
+local function menuHookCallback(menuPosition, lookThing, useThing, creatureThing)
+  if not creatureThing then
+    return
+  end
+  
+  if creatureThing:isLocalPlayer() then
+    return
+  end
+  
+  if creatureThing:isPlayer() then
+    storage.followLeader = creatureThing:getName()
+    leader = getCreatureByName(storage.followLeader)
+    followLeaderTextEdit:setText(storage.followLeader)
+    ultimateFollow.setOn()
+  end
+end
+modules.game_interface.addMenuHook('changeFollow', "Change Follow", menuHookCallback, displayCondition)
+
+
+
+addIcon("Follow", {item=9392,movable=true, text="Follow"}, ultimateFollow)
+
+-- Zbieraczka na WSZYSTKIE itemy ktore da sie podniesc
+
+local c = {
+    CheckPOS = 1 -- DISTANCE
+  }
+  local macrotime = 200 -- DELAY MACRO
+  zbieraczka = macro(macrotime, "Zbieraczka", function()
+    for x = -c.CheckPOS, c.CheckPOS do
+        for y = -c.CheckPOS, c.CheckPOS do
+            local tile = g_map.getTile({x = posx() + x, y = posy() + y, z = posz()})
+            if tile then
+                local things = tile:getThings()
+                for i, item in pairs(things) do
+                    if item:isPickupable() then
+                        local containers = getContainers()
+                        for _, container in pairs(containers) do
+                            g_game.move(item, container:getSlotPosition(container:getItemsCount()), item:getCount())
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+  end)
+
+addIcon("zbieraczka", {item = 3454, text = "ZBIERAJ"}, zbieraczka) --ikonka dla zbieraczki
+
+
+--usun cialo
+
+local cutGrav = macro(100, "USUN CIALO", function()
+  for _, tile in ipairs(g_map.getTiles(posz())) do
+    for u,item in ipairs(tile:getItems()) do      
+    if (item and (item:getId() == 4240 or item:getId() == 4247) and getDistanceBetween(pos(), item:getPosition()) == 1) then
+      useWith(3197, item)
+    end
+    end
+  end
+end)
+
+addIcon("cutGrav", {item = 4240, text = "USUN"}, cutGrav)
+
+-- SPAM SPELLI
+
+addIcon("spamue", {item={id=8193, count=1}, text="UE"}, macro(1000,  function()
+  say("Exevo Gran Mas Frigo")
+end))
+
+addIcon("spamaf", {item={id=8137, count=1}, text="TARGET"}, macro(1000,  function()
+  say("Exori Frigo")
+end))
+
+-- USUN EFEKTY
+
+local hideEffects = macro(10000, "hideEffects", function() end)
+
+onAddThing(function(tile, thing)
+  if hideEffects.isOff() then return end
+  if thing:isEffect() then
+    thing:setId(0)
+  end
+end)
+
+onTalk(function(name, level, mode, text, channelId, pos)
+  if hideEffects.isOff() then return end
+  if mode ~= 44 then return end
+  g_map.cleanTexts()
+end)
+
+onTextMessage(function(mode, text) 
+  if hideEffects.isOff() then return end
+  if mode == 20 and (string.find(text, "Using the last") or string.find(text, "You see") or string.find(text, "Using one of")) then 
+   modules.game_textmessage.displayMessage(20, ' ')
+  end
+end)
+
+addIcon("hideEffects", {item={id = 5903},text="EFEKTY", movable=true}, function(icon, isOn)
+    if isOn then
+        say("")
+    end
+    hideEffects.setOn(isOn)
+end)
+
+
+-- POT ME (SD ONLY) - wymaga wielu shooterow
+
+-- CONFIG
+local WINDOW_MS     = 2000
+local HITS_NEEDED   = 5
+local MIN_SHOOTERS  = 5      -- <- ile roznych graczy musi trafic SD w oknie czasu (np. 2/3/4)
+local ICON_ID       = 238
+local MP_THRESHOLD  = 85
+local ALERT_CD_MS   = 2000
+local SD_MISSILE_ID = 32
+
+-- hit = {t = now, shooterId = number}
+local hits = {}
+local alertCdUntil = 0
+
+local function inCooldown()
+  return now < alertCdUntil
+end
+
+local function lockAlert(msCd)
+  alertCdUntil = now + (msCd or ALERT_CD_MS)
+end
+
+local function resetHits()
+  hits = {}
+end
+
+local function pruneOldHits()
+  local cutoff = now - WINDOW_MS
+  while hits[1] and hits[1].t < cutoff do
+    table.remove(hits, 1)
+  end
+end
+
+local function pushHit(shooterId)
+  hits[#hits+1] = { t = now, shooterId = shooterId }
+  pruneOldHits()
+end
+
+local function hitCount()
+  return #hits
+end
+
+local function distinctShooters()
+  pruneOldHits()
+  local seen = {}
+  local count = 0
+  for _, h in ipairs(hits) do
+    local sid = h.shooterId
+    if sid and not seen[sid] then
+      seen[sid] = true
+      count = count + 1
+    end
+  end
+  return count
+end
+
+-- Zwraca shooterId tylko jesli na tile zrodla jest DOKLADNIE 1 gracz (inny niz ty).
+-- Jak jest 0 albo >1, zwraca nil (unikamy falszywek).
+local function getSingleShooterId(missle)
+  local src = missle:getSource()
+  if not src then return nil end
+
+  local tile = g_map.getTile(src)
+  if not tile then return nil end
+
+  local creatures = tile:getCreatures()
+  if not creatures then return nil end
+
+  local lp = g_game.getLocalPlayer()
+  local meId = lp and lp:getId() or nil
+  if not meId then return nil end
+
+  local foundId = nil
+  for _, c in ipairs(creatures) do
+    if c and c:isPlayer() then
+      local cid = c:getId()
+      if cid and cid ~= meId then
+        if foundId and foundId ~= cid then
+          return nil -- >1 gracz na tile zrodla -> nie wiemy kto strzelil
+        end
+        foundId = cid
+      end
+    end
+  end
+  return foundId
+end
+
+local potMeMacro = macro(100, "POT ME SD", function()
+  if inCooldown() then return end
+  if hitCount() < HITS_NEEDED then return end
+  if distinctShooters() < MIN_SHOOTERS then return end
+  if manapercent() >= MP_THRESHOLD then return end
+  if not hasManaShield() then return end
+
+  say("POT ME")
+  lockAlert(ALERT_CD_MS)
+  resetHits()
+end)
+potMeMacro:setOff()
+
+addIcon("PotMeIcon", {
+  item = ICON_ID,
+  text = "POT ME",
+  movable = true,
+  switchable = true
+}, function(widget, enabled)
+  if enabled then
+    potMeMacro:setOn()
+  else
+    potMeMacro:setOff()
+    resetHits()
+  end
+end)
+
+onMissle(function(missle)
+  if not potMeMacro:isOn() then return end
+  if inCooldown() then return end
+
+  -- tylko SD
+  if missle:getId() ~= SD_MISSILE_ID then return end
+
+  -- tylko gdy leci w ciebie
+  local dst = missle:getDestination()
+  if not dst then return end
+
+  local p = pos()
+  if not p or p.z ~= dst.z then return end
+  if p.x ~= dst.x or p.y ~= dst.y then return end
+
+  -- shooter
+  local shooterId = getSingleShooterId(missle)
+  if not shooterId then return end
+
+  pushHit(shooterId)
+end)
+
+-- DOBIJACZKA
+local finisherMacro = macro(100, "DOBIJACZKA", function()
+  if not g_game.isAttacking() then return end
+
+  local target = g_game.getAttackingCreature()
+  if not target then return end
+
+  local hp = target:getHealthPercent()
+  if not hp or hp >= 40 then return end
+
+  local me = pos()
+  local tp = target:getPosition()
+  if not tp then return end
+
+  local distance = math.max(
+    math.abs(tp.x - me.x),
+    math.abs(tp.y - me.y)
+  )
+
+  if distance > 5 then return end
+
+  say("exevo gran mas frigo")
+end)
+
+finisherMacro:setOff()
+
+addIcon("DobijaczkaIcon",
+  { item = 3334, text = "DOBIJ", movable = true, switchable = true },
+  function(widget, enabled)
+    if enabled then
+      finisherMacro:setOn()
+    else
+      finisherMacro:setOff()
+    end
+  end
+)
+
+-- COUNT PPL WAR
+
+local emblematFriends = 1
+local emblematEnemy = 2
+
+local function pobierzEmblemat(istota)
+  if not istota or not istota.getEmblem then return nil end
+  return istota:getEmblem()
+end
+
+local function policzNaEkranie()
+  local mojaPos = pos()
+  if not mojaPos then return 0, 0 end
+
+  local widoczni = g_map.getSpectators(mojaPos, false) or {}
+  local friends = 0
+  local enemy = 0
+
+  for _, istota in ipairs(widoczni) do
+    if istota
+       and istota:isPlayer() then
+
+      local embl = pobierzEmblemat(istota)
+
+      if embl == emblematFriends then
+        friends = friends + 1
+      elseif embl == emblematEnemy then
+        enemy = enemy + 1
+      end
+    end
+  end
+
+  return friends, enemy
+end
+
+local function wyslijNaCzat()
+  local friends, enemy = policzNaEkranie()
+  say(string.format("%d BRACI %d CWELOW", friends, enemy))
+end
+
+addIcon("COUNT", {
+  item = 9186, 
+  text = "COUNT",
+  movable = true,
+  switchable = false
+}, function()
+  wyslijNaCzat()
+end)
+
+-- AUTO BLESS JEZELI VBOT NIE DAJE RADY
+
+local bless = false
+macro(1000, function()
+    if bless ~= true then
+        bless = true
+        say("!bless")
+    end
+end)
+
+-- AUTO PARAL JEZELI PONIZEJ 80% MANY WYLACZA/UZYWA NA TARGET LUB CZERWONA BLACHA
+
+local hotkeyRuna = "" -- Wpisz hotkey w puste miejsce, jezeli chcesz miec parala pod hotkeyem
+
+local function isOnScreen(p1, p2)
+  return math.abs(p1.x - p2.x) <= 7 and math.abs(p1.y - p2.y) <= 5
+end
+
+local function distance(p1, p2)
+  return math.max(math.abs(p1.x - p2.x), math.abs(p1.y - p2.y))
+end
+
+function autoParalRuna()
+  if not isInPz() then
+      if not g_game.isSafeFight() then
+          local target = g_game.getAttackingCreature()
+          if target and target:isPlayer() then
+              if target:canShoot() and manapercent() > 80 then
+                  useWith(3165, target)
+                  delay(100)
+              else
+                  g_game.cancelAttack()
+              end
+          else
+              for _, creature in ipairs(getSpectators()) do
+                  if creature:isPlayer() then
+                      local isEnemy = isEnemy(creature:getName())
+                      local hasEmblem3 = (creature:getEmblem() == 2)
+                      if isEnemy or hasEmblem3 then
+                          if creature:canShoot() and manapercent() > 80 and isOnScreen(g_game.getLocalPlayer():getPosition(), creature:getPosition()) then
+                              g_game.attack(creature)
+                              useWith(3165, target)
+                              delay(100)
+                              break
+                          end
+                      end
+                  end
+              end
+          end
+      end
+  end
+end
+
+paralRunka = macro(20, "AutoParal", hotkeyRuna, function()
+  autoParalRuna()
+end)
+
+macro(200,  function()
+  if manapercent() < 80 then
+    if paralRunka.isOn() then
+      paralRunka.setOff()
+    end
+  end
+end)
+
+-- Usun linijke w dol jezeli nie chesz miec ikonki
+addIcon("autoParalRunaIcon", { item = 3165, text = "PARAL" .. hotkeyRuna, moveable = true }, paralRunka)
+
+-- BUG MAPA DLA CWELI
+
+local function checkPos(x, y)
+  xyz = g_game.getLocalPlayer():getPosition()
+  xyz.x = xyz.x + x
+  xyz.y = xyz.y + y
+  tile = g_map.getTile(xyz)
+  if tile then
+    return g_game.use(tile:getTopUseThing(), 1, { ignoreNonPathable = true, precision = 1 })
+  else
+    return false
+  end
+end
+
+Bugmap = {}
+Bugmap.macro = macro(1, 'Bug Map', function()
+
+  -- BUGMAP DZIALA TYLKO GDY CZAT WYLACZONY
+  if modules.game_console.isChatEnabled() then return end
+
+  if modules.corelib.g_keyboard.isKeyPressed('w') then
+    checkPos(0, -5)
+  elseif modules.corelib.g_keyboard.isKeyPressed('e') then
+    checkPos(5, -5)
+  elseif modules.corelib.g_keyboard.isKeyPressed('d') then
+    checkPos(5, 0)
+  elseif modules.corelib.g_keyboard.isKeyPressed('c') then
+    checkPos(5, 5)
+  elseif modules.corelib.g_keyboard.isKeyPressed('s') then
+    checkPos(0, 5)
+  elseif modules.corelib.g_keyboard.isKeyPressed('z') then
+    checkPos(-5, 5)
+  elseif modules.corelib.g_keyboard.isKeyPressed('a') then
+    checkPos(-5, 0)
+  elseif modules.corelib.g_keyboard.isKeyPressed('q') then
+    checkPos(-5, -5)
+  end
+end)
+
+Bugmap.Icon = addIcon("Bug Map", {item=10607, text="Bug Map"}, function(icon, isOn)
+  Bugmap.macro.setOn(isOn)
+end)
+
+-- DASH
+
+-- DASH
+
+local walkMarkerText = "WALK"
+local lastKeyPressTime = 0
+local walkHotkey = storage.keyWalk or "F8"
+local clearHotkey = storage.clearKey or "Space"
+local markedPositions = {}
+local getDirectionFromPos = modules.corelib.getDirectionFromPos
+local markedTilesHistory = {}
+
+local function isWsadWalkingEnabled()
+    return modules.client_options.getOption("wsadWalking") == true
+end
+
+local function findMarkedPositionIndex(position)
+    for index, markedPos in pairs(markedPositions) do
+        if markedPos.x == position.x and markedPos.y == position.y then
+            return index
+        end
+    end
+
+    return nil
+end
+
+local function findTileHistoryIndex(position)
+    for index, tilePos in pairs(markedTilesHistory) do
+        if tilePos.x == position.x and tilePos.y == position.y then
+            return index
+        end
+    end
+
+    return nil
+end
+
+local dashWalkMacro = macro(1, "Dash Walk", function()
+    if not isWsadWalkingEnabled() or not markedPositions[1] then
+        return
+    end
+
+    local playerPos = player:getPosition()
+
+    for _, targetPos in pairs(markedPositions) do
+        if getDistanceBetween(playerPos, targetPos) == 1 then
+            local direction = getDirectionFromPos(playerPos, targetPos)
+            if direction then
+                g_game.walk(direction)
+            end
+        end
+    end
+end)
+
+onKeyDown(function(keyPressed)
+    if not isWsadWalkingEnabled() or dashWalkMacro.isOff() then
+        return
+    end
+
+    if keyPressed == walkHotkey then
+        lastKeyPressTime = now
+        local tileUnderCursor = getTileUnderCursor()
+
+        if not tileUnderCursor then
+            return
+        end
+
+        local tilePosition = tileUnderCursor:getPosition()
+        local markedIndex = findMarkedPositionIndex(tilePosition)
+
+        if markedIndex then
+            tileUnderCursor:setText("")
+            table.remove(markedPositions, markedIndex)
+            local historyIndex = findTileHistoryIndex(tilePosition)
+            if historyIndex then
+                table.remove(markedTilesHistory, historyIndex)
+            end
+        else
+            tileUnderCursor:setText(walkMarkerText, "#a1ff0a")
+            table.insert(markedPositions, tilePosition)
+            table.insert(markedTilesHistory, tilePosition)
+        end
+    elseif keyPressed == clearHotkey then
+        for _, tilePos in ipairs(markedTilesHistory) do
+            local tile = g_map.getTile(tilePos)
+            if tile then
+                tile:setText("")
+            end
+        end
+        table.clear(markedPositions)
+        table.clear(markedTilesHistory)
+    end
+end)
+
+onKeyPress(function(keyPressed)
+    if not isWsadWalkingEnabled() or dashWalkMacro.isOff() then
+        return
+    end
+
+    if keyPressed ~= walkHotkey then
+        return
+    end
+
+    if lastKeyPressTime - now < -500 then
+        for _, tile in ipairs(g_map.getTiles(posz())) do
+            if tile:getText() == walkMarkerText then
+                tile:setText("")
+            end
+        end
+        table.clear(markedPositions)
+        table.clear(markedTilesHistory)
+    end
+end)
+
+onPlayerPositionChange(function(newPosition, oldPosition)
+    if not isWsadWalkingEnabled() or dashWalkMacro.isOff() then
+        return
+    end
+
+    local markedIndex = findMarkedPositionIndex(newPosition)
+    if markedIndex then
+        table.remove(markedPositions, markedIndex)
+        local tile = g_map.getTile(newPosition)
+        if tile then
+            tile:setText("")
+        end
+    end
+end)
+
+addLabel("Hotkey", "Hotkey")
+addTextEdit("Hotkey", storage.keyWalk or "F6", function(widget, newValue)
+    storage.keyWalk = newValue
+    walkHotkey = newValue
+end)
+
+addLabel("Clear Key", "Clear hotkey")
+addTextEdit("Clear Key", storage.clearKey or "Space", function(widget, newValue)
+    storage.clearKey = newValue
+    clearHotkey = newValue
+end)
+
+-- EXIVA DLA CWELI
+
+local panelName = "tcLastExiva"
+local tcLastExiva = setupUI([[
+ExivaLabel < Label
+  height: 12
+  background-color: #00000055
+  opacity: 0.89
+  anchors.horizontalCenter: parent.horizontalCenter
+  text-auto-resize: true
+  font: verdana-11px-rounded
+
+Panel
+  id: msgPanel
+  height: 26
+  width: 100
+  anchors.bottom: parent.bottom
+  anchors.horizontalCenter: parent.horizontalCenter
+  margin-bottom: 20
+
+  ExivaLabel
+    id: lblMessage
+    color: green
+    anchors.bottom: parent.bottom
+    !text: 'None.'
+
+  ExivaLabel
+    id: lblExiva
+    color: orange
+    anchors.bottom: prev.top
+    !text: 'SPAM Last Exiva: None'
+
+]], modules.game_interface.getMapPanel())
+
+local tclastExivaUI = setupUI([[
+Panel
+  margin: 3
+  height: 66
+  layout:
+    type: verticalBox
+
+  HorizontalSeparator
+    id: separator
+
+  Label
+    id: title
+    text: SPAM Last Exiva
+    margin-top: 1
+    text-align: center
+    font: verdana-11px-rounded
+
+  Panel
+    id: time
+    height: 22
+    Label
+      !text: 'Czas (w sek.):'
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.right: next.left
+      text-align: center
+      height: 15
+      margin-right: 6
+      font: verdana-11px-rounded
+
+    BotTextEdit
+      id: text
+      text: 5
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 5
+      height: 17
+      width: 55
+      font: verdana-11px-rounded
+
+  ]], parent)
+
+if not storage[panelName] then
+  storage[panelName] = {
+    name = '',
+    timer = 5,
+  }
+end
+
+tclastExivaUI.time.text:setText(storage[panelName].timer)
+tclastExivaUI.time.text.onTextChange = function(widget, text)
+  storage[panelName].timer = tonumber(text)
+end
+
+local lastExiva = ''
+lastExiva = storage[panelName].name
+tcLastExiva.lblExiva:setText('Exiva: ' .. lastExiva)
+
+onTalk(function(name, level, mode, text, channelId, pos)
+  if name ~= player:getName() then return end
+  local low = text:lower()
+
+  if mode == 44 and low:find('exiva') then
+    local target = low:match('exiva%s+"([^"]+)"') or low:match('exiva%s+(.+)$')
+    if target then
+      target = target:match("^%s*(.-)%s*$")
+      lastExiva = target
+      storage[panelName].name = lastExiva
+      tcLastExiva.lblExiva:setText('exiva: ' .. lastExiva)
+    end
+  end
+end)
+
+onTextMessage(function(mode, text)
+  if mode ~= 20 then return end
+  local wiadomosc = "([a-z A-Z]*) is ([a-z -A-Z]*)(?:to the|standing|below|above) ([a-z -A-Z]*)."
+  local data = regexMatch(text, wiadomosc)[1]
+  if data and data[2] and data[3] then
+    schedule(10, function()
+      tcLastExiva.lblMessage:setText(text)
+    end)
+  end
+end)
+
+tclastExivaMacro = macro(100, "last exiva", "F12", function()
+  if lastExiva:len() == 0 then return end
+
+  local currentHP = hppercent()
+  local currentMP = manapercent()
+
+  -- warunek HP magi po MP>=90, knight/rp po HP>=90
+  if currentMP >= 90 or currentHP >= 90 then
+    say('exiva "' .. lastExiva .. '"')
+    delay(tonumber(storage[panelName].timer) * 1000)
+  end
+end, tclastExivaUI)
+
+addIcon("tclastExivaMacro", {item = 5898, text = "EXIVA"}, tclastExivaMacro)
+
+
+-- AUTO-FLOWER
+
+storage.autoFlower = storage.autoFlower or {
+  itemId      = 2981,      -- ID itemu (kwiatka)
+  hotkey      = "1",       -- klawisz do zaznaczania pola
+  text        = "FLOWER",  -- napis na polu
+  textColor   = "yellow",  -- kolor napisu
+  maxFlowers  = 1,         -- ile sztuk ma leżeć na polu
+  maxDistance = 8,         -- max odległość od gracza (x/y)
+  enabled     = true       -- globalny ON/OFF refill (tylko z configu)
+}
+
+local cfg = storage.autoFlower
+
+-- Zaznaczone pola: key = "x,y,z", value = {x=..,y=..,z=..}
+local flowerTiles = {}
+
+local function posToKey(pos)
+  return string.format("%d,%d,%d", pos.x, pos.y, pos.z)
+end
+
+local function keyToPos(key)
+  local x, y, z = key:match("^(%-?%d+),(%-?%d+),(%-?%d+)$")
+  if not x then return nil end
+  return { x = tonumber(x), y = tonumber(y), z = tonumber(z) }
+end
+
+-- Hotkey: zaznaczanie / odznaczanie pola pod kursorem
+onKeyPress(function(key)
+  if not cfg.enabled then
+    return
+  end
+
+  if key:lower() ~= tostring(cfg.hotkey):lower() then
+    return
+  end
+
+  local tile = getTileUnderCursor()
+  if not tile then
+    return
+  end
+
+  local pos    = tile:getPosition()
+  local keyStr = posToKey(pos)
+
+  if flowerTiles[keyStr] then
+    -- Odznacz: usuń napis i z tabeli
+    tile:setText("")
+    flowerTiles[keyStr] = nil
+  else
+    -- Zaznacz: ustaw napis i zapamiętaj pozycję
+    tile:setText(cfg.text, cfg.textColor)
+    flowerTiles[keyStr] = { x = pos.x, y = pos.y, z = pos.z }
+  end
+end)
+
+-- Zapamiętujemy ostatnie Z, żeby wykrywać zejście/wejście po schodach
+local lastZ = pos().z
+
+-- Makro do uzupełniania itemów na oznaczonych polach
+local autoFlowerMacro = macro(1, function()
+  if not cfg.enabled then
+    return
+  end
+
+  local playerPos = pos()
+
+  -- Zmiana piętra → czyścimy wszystkie FLOWER-y z poprzedniego Z
+  if playerPos.z ~= lastZ then
+    for keyStr, storedPos in pairs(flowerTiles) do
+      local posData = storedPos or keyToPos(keyStr)
+      if posData and posData.z == lastZ then
+        local tile = g_map.getTile(posData)
+        if tile and tile:getText() == cfg.text then
+          tile:setText("") -- usuwamy napis
+        end
+      end
+    end
+    flowerTiles = {}
+    lastZ = playerPos.z
+    return -- ten tick pomijamy refill
+  end
+
+  for keyStr, storedPos in pairs(flowerTiles) do
+    local posData = storedPos or keyToPos(keyStr)
+    if not posData then
+      flowerTiles[keyStr] = nil
+    else
+      local dx = math.abs(playerPos.x - posData.x)
+      local dy = math.abs(playerPos.y - posData.y)
+
+      -- za daleko albo inne piętro → nie uzupełniamy
+      if dx > (cfg.maxDistance or 8) or dy > (cfg.maxDistance or 8) or playerPos.z ~= posData.z then
+        -- opcjonalnie można czyścić:
+        -- flowerTiles[keyStr] = nil
+      else
+        local tile = g_map.getTile(posData)
+        if not tile then
+          -- tile zniknął (np. inna mapa) → czyścimy
+          flowerTiles[keyStr] = nil
+        else
+          -- NOWY WARUNEK: jeśli z jakiegoś powodu napis już nie jest FLOWER,
+          -- traktujemy to jako odznaczone pole (nie refilliujemy)
+          if tile:getText() ~= cfg.text then
+            flowerTiles[keyStr] = nil
+          else
+            local count = 0
+            local items = tile:getItems() or {}
+
+            -- policz ile itemów już leży
+            for _, item in ipairs(items) do
+              if item:getId() == cfg.itemId then
+                count = count + item:getCount()
+              end
+            end
+
+            -- jeśli mniej niż maxFlowers → dorzuć z plecaków
+            if count < (cfg.maxFlowers or 1) then
+              local stack = findItem(cfg.itemId)
+              if stack then
+                g_game.move(stack, posData, 1)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end)
+
+if not cfg.enabled then
+  autoFlowerMacro:setOff()
+end
+
+
+-- SPAM SSA/MIGHT RING
+
+local ringssy = macro(1, "SPAM SS / MRING", function()  -- tworzy makro działające co 1 ms, zapisane w zmiennej ringssy
+    local findStoneSkin = findItem(3081)  -- szuka w otwartych kontenerach itemu ID 3081 (Stone Skin Amulet)
+    local findKoshei = findItem(9302)     -- szuka itemu ID 9302 (Koshei)
+    local findring = findItem(9593)       -- szuka ringa ID 9593
+    local findmind = findItem(3048)       -- szuka Might Ringa ID 3048
+    local backpackSlot = {x=65535, y=SlotBackpack, z=0}  -- pozycja techniczna wskazująca slot głównego plecaka
+
+    if findStoneSkin and (not getNeck() or getNeck():getId() ~= 3081) then  
+        -- jeśli SSA istnieje ORAZ nie masz go założonego
+
+        if getNeck() then  
+            -- jeśli masz aktualnie założony jakiś amulet
+
+            g_game.move(getNeck(), backpackSlot, 1)  
+            -- zdejmuje aktualny amulet i przenosi go do głównego plecaka
+        end
+
+        moveToSlot(findStoneSkin, SlotNeck)  
+        -- zakłada Stone Skin Amulet do slotu amuletu
+
+    elseif not findStoneSkin and findKoshei and (not getNeck() or getNeck():getId() ~= 9802) then  
+        -- jeśli NIE ma SSA, ale jest Koshei i nie masz go założonego
+
+        if getNeck() then  
+            -- jeśli masz aktualnie założony jakiś amulet
+
+            g_game.move(getNeck(), backpackSlot, 1)  
+            -- zdejmuje obecny amulet do plecaka
+        end
+
+        moveToSlot(findKoshei, SlotNeck)  
+        -- zakłada Koshei do slotu amuletu
+    end
+
+    if findmind and (not getFinger() or getFinger():getId() ~= 3048) then  
+        -- jeśli jest Might Ring i nie masz go założonego
+
+        if getFinger() then  
+            -- jeśli masz założony jakiś ring
+
+            g_game.move(getFinger(), backpackSlot, 1)  
+            -- zdejmuje aktualny ring i odkłada go do plecaka
+        end
+
+        moveToSlot(findmind, SlotFinger)  
+        -- zakłada Might Ring do slotu ringa
+
+    elseif not findmind and findring and (not getFinger() or getFinger():getId() ~= 9593) then  
+        -- jeśli NIE ma Might Ringa, ale jest ring 9593 i nie masz go założonego
+
+        if getFinger() then  
+            -- jeśli masz założony jakiś ring
+
+            g_game.move(getFinger(), backpackSlot, 1)  
+            -- zdejmuje obecny ring do plecaka
+        end
+
+        moveToSlot(findring, SlotFinger)  
+        -- zakłada ring 9593 do slotu ringa
+    end
+end)  
+
+addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)  
+    ringssy.setOn(isOn)  
+end)
+
+-- SPRAWDZ SE PROFESJE
+
+local myVocation
+local vocationRegex = "You see yourself%. You are a ([^%.]+)"
+
+local function checkMyVocation()
+  if not myVocation then
+    g_game.look(g_game.getLocalPlayer())
+    schedule(1000, checkMyVocation)
+  end
+end
+
+onTextMessage(function(_, text)
+  local vocation = text:match(vocationRegex)
+  if vocation then
+    local lv = vocation:lower()
+
+    if lv:find("sorcerer") then
+      myVocation = "MS"
+      warn("Rozpoznano profesje: MS")
+    elseif lv:find("druid") then
+      myVocation = "ED"
+      warn("Rozpoznano profesje: ED")
+    elseif lv:find("knight") then
+      myVocation = "EK"
+      warn("Rozpoznano profesje: EK")
+    elseif lv:find("paladin") then
+      myVocation = "RP"
+      warn("Rozpoznano profesje: RP")
+    else
+      myVocation = "Unknown"
+      warn("Rozpoznano profesje: Unknown")
+    end
+  end
+end)
+
+checkMyVocation()
+
+-- GUILD HEALING MS/ED/RP/EK
+
+guildhealing = macro(200, "Guild Healing", function()
+  if not myVocation then return end -- czekaj az wykryje profesje
+
+  local myPlayer = g_game.getLocalPlayer()
+  if not myPlayer then return end
+
+  local myPosition = myPlayer:getPosition()
+
+  for _, creature in ipairs(getSpectators()) do
+    if creature
+      and creature:isPlayer()
+      and creature:getEmblem() == 1
+      and not creature:isLocalPlayer() then
+
+      local healthPercent = creature:getHealthPercent()
+      if healthPercent <= 80 then
+
+        -- ED → exura sio (mana > 30%)
+        if myVocation == "ED" then
+          if manapercent() > 30 then
+            saySpell('exura sio "' .. creature:getName() .. '"', 100)
+          end
+
+        -- MS → UH (mana > 30%)
+        elseif myVocation == "MS" then
+          if manapercent() > 30 then
+            useWith(3160, creature)
+          end
+
+        -- EK + RP → UH (HP > 80%) + tylko 1 sqm
+        elseif myVocation == "EK" or myVocation == "RP" then
+          local creaturePosition = creature:getPosition()
+          if creaturePosition
+            and getDistanceBetween(creaturePosition, myPosition) <= 1
+            and hppercent() > 80 then
+            useWith(3160, creature)
+          end
+        end
+      end
+    end
+  end
+end)
+
+-- KOLOROWANIE
+
+local kolorowanie = macro(100, "KOLOROWANIE", function()
+  local me = g_game.getLocalPlayer()
+  if not me then return end
+
+  local commander = (storage.Commander or ""):lower()
+
+  for _, c in ipairs(getSpectators()) do
+    if c and c:isPlayer() and not c:isLocalPlayer() then
+
+      local name = c:getName()
+      local nameLower = name:lower()
+      local emblem = c:getEmblem()
+
+      local kolor = nil
+      local tekst = ""
+
+      -- Commander (priorytet nad wszystkim)
+      if commander ~= "" and nameLower == commander then
+        kolor = "yellow"
+        tekst = "\n[C]"
+
+      -- Enemy: emblem 2 / 3 LUB Enemy List z bota
+      elseif emblem == 2
+         or emblem == 3
+         or (storage.playerList
+             and storage.playerList.enemyList
+             and table.find(storage.playerList.enemyList, name, true)) then
+
+        kolor = "red"
+        tekst = "\n[E]"
+
+      -- Ally: emblem 1
+      elseif emblem == 1 then
+        kolor = "green"
+        tekst = "\n[F]"
+      end
+
+      -- Ustaw kolor lub zresetuj
+      if kolor then
+        c:setInformationColor(kolor)
+        c:setText(tekst, kolor)
+        c:showStaticSquare(kolor)
+      else
+        -- reset jesli nie pasuje do zadnej kategorii
+        c:setText("")
+        c:setInformationColor("green")
+      end
+    end
+  end
+end)
+
+addLabel("", "Nick Commandera")
+addTextEdit("", storage.Commander or "", function(_, text)
+  storage.Commander = text
+end)
+
+-- Exiva Commander Macro
+local exivaMacro = macro(1500, "Exiva Commander", function()
+    if hppercent() > 80 and manapercent() > 80 and not isParalyzed() then
+        say("exiva \"" .. storage.Commander)
+    end
+end)
