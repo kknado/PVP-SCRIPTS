@@ -364,7 +364,7 @@ addIcon("hideEffects", {item={id = 5903},text="EFEKTY", movable=true}, function(
 end)
 
 
--- POT ME (SD ONLY) - wymaga wielu shooterow
+-- POT ME (SD ONLY)
 
 -- CONFIG
 local WINDOW_MS     = 2000
@@ -375,7 +375,6 @@ local MP_THRESHOLD  = 85
 local ALERT_CD_MS   = 2000
 local SD_MISSILE_ID = 32
 
--- hit = {t = now, shooterId = number}
 local hits = {}
 local alertCdUntil = 0
 
@@ -421,8 +420,6 @@ local function distinctShooters()
   return count
 end
 
--- Zwraca shooterId tylko jesli na tile zrodla jest DOKLADNIE 1 gracz (inny niz ty).
--- Jak jest 0 albo >1, zwraca nil (unikamy falszywek).
 local function getSingleShooterId(missle)
   local src = missle:getSource()
   if not src then return nil end
@@ -443,7 +440,7 @@ local function getSingleShooterId(missle)
       local cid = c:getId()
       if cid and cid ~= meId then
         if foundId and foundId ~= cid then
-          return nil -- >1 gracz na tile zrodla -> nie wiemy kto strzelil
+          return nil
         end
         foundId = cid
       end
@@ -697,8 +694,6 @@ end)
 Bugmap.Icon = addIcon("Bug Map", {item=10607, text="Bug Map"}, function(icon, isOn)
   Bugmap.macro.setOn(isOn)
 end)
-
--- DASH
 
 -- DASH
 
@@ -1335,7 +1330,7 @@ end)
 -- ANTI PUSH Z DESTRO
 
 local dropItems = {3035, 3031}
-local dropQuantities = {2, 2} -- Adjusted quantities
+local dropQuantities = {2, 2}
 local dropDelay = 50
 local fields = {2121, 2123, 2126}
 local destroyField = 3148
@@ -1359,7 +1354,7 @@ if tile and gpAntiPushDrop:isOn() then
     local topThing = tile:getTopThing()
     local topId = topThing and topThing:getId() or 0
 
-    -- jesli pod toba juz lezy gold albo plat, to NIE rzucaj ponownie
+    -- Nie rzucaj ponownie
     if topId ~= 3031 and topId ~= 3035 then
         for i, itemId in ipairs(dropItems) do
             local dropItem = findItem(itemId)
@@ -1453,12 +1448,7 @@ openBackpacks = function()
     end)
 end
 
--- this loads the function straighta way when reloading config
 openBackpacks()
--- this adds a button to your bot, so you can press it
-UI.Button("BACKPACK OPEN", function()
-    openBackpacks()
-end)
 
 -- DESTRO POD DUPE
 
