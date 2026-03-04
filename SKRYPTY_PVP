@@ -1143,7 +1143,6 @@ local ringssy = macro(1, "SPAM SS / MRING", function()
   end
 end)
 
--- OPEN NEXT SSA BP (musi byc w zmiennej, zeby dac setOn)
 local openNextSSABp = macro(10, "OPEN NEXT SSA BP", function()
   local bpToOpen = 2870
   for _, container in pairs(getContainers()) do
@@ -1160,7 +1159,6 @@ local openNextSSABp = macro(10, "OPEN NEXT SSA BP", function()
   end
 end)
 
--- OPEN NEXT MIGHT BP (musi byc w zmiennej, zeby dac setOn)
 local openNextMightBp = macro(10, "OPEN NEXT MIGHT BP", function()
   local bpToOpen = 2871
   for _, container in pairs(getContainers()) do
@@ -1177,11 +1175,9 @@ local openNextMightBp = macro(10, "OPEN NEXT MIGHT BP", function()
   end
 end)
 
--- startowo OFF (beda wlaczane razem z ringssy)
 openNextSSABp.setOn(false)
 openNextMightBp.setOn(false)
 
--- jeden przelacznik wlacza 3 makra naraz
 addIcon("ringssyicon", {item={id = 3081}, movable=true}, function(icon, isOn)
   ringssy.setOn(isOn)
   openNextSSABp.setOn(isOn)
@@ -1496,98 +1492,68 @@ schedule(1, function()
   destroPoRuchu.setOff()
 end)
 
+-- V-Hack (blokada poziomu mapy)
+
+storage.vHack = storage.vHack or false
+
+onPlayerPositionChange(function(pos)
+    if storage.vHack then
+        local gameMapPanel = modules.game_interface.getMapPanel()
+        if gameMapPanel then
+            gameMapPanel:lockVisibleFloor(pos.z)
+        end
+    end
+end)
+
+local vHackIcon = addIcon("VHack", {item={id = 9141}, text="V-Hack", movable=true}, function(icon, isOn)
+    storage.vHack = isOn
+
+    local gameMapPanel = modules.game_interface.getMapPanel()
+    if gameMapPanel then
+        if isOn then
+            gameMapPanel:lockVisibleFloor(posz())
+        else
+            gameMapPanel:unlockVisibleFloor()
+        end
+    end
+end)
+
+vHackIcon:setOn(storage.vHack)
+
 -- MW STEP
 
 local MW_ITEM_ID = 3180
-local MW_ON_TILE_1 = 2129
-local MW_ON_TILE_2 = 2128
-
 local toggle = macro(10, "MW STEP", function() end)
 
-local oznaczonyPos = nil
-local mwIcon = nil
-
-local function ustawIkone(on)
-  if not mwIcon then return end
-  if mwIcon.setOn then
-    pcall(function() mwIcon:setOn(on) end)
-    pcall(function() mwIcon.setOn(on) end)
-  end
-  if mwIcon.setChecked then
-    pcall(function() mwIcon:setChecked(on) end)
-    pcall(function() mwIcon.setChecked(on) end)
-  end
+local ozn
+local function czysc()
+  if not ozn then return end
+  local t = g_map.getTile(ozn)
+  if t then pcall(function() t:setText("") end) end
+  ozn = nil
 end
 
-local function jestMWNaTile(tile)
-  if not tile then return false end
-  local thing = tile:getTopThing() or tile:getTopUseThing()
-  if not thing then return false end
-  local id = thing:getId()
-  return id == MW_ON_TILE_1 or id == MW_ON_TILE_2
-end
+macro(10, function()
+  if not toggle:isOn() then return czysc() end
+  if ozn then return end
+  local p = pos()
+  local t = g_map.getTile(p)
+  if not t then return toggle:setOff() end
+  pcall(function() t:setText("MW", "#ff0000") end)
+  ozn = {x=p.x,y=p.y,z=p.z}
+end)
 
-local function wyczyscNapisJesliMW(pos)
-  local tile = g_map.getTile(pos)
-  if not tile then return end
+onPlayerPositionChange(function(_, oldPos)
+  if not toggle:isOn() or not ozn or not oldPos then return end
+  if oldPos.x ~= ozn.x or oldPos.y ~= ozn.y or oldPos.z ~= ozn.z then return end
 
-  if jestMWNaTile(tile) then
-    tile:setText("")
-    oznaczonyPos = nil
-    return
-  end
+  local t = g_map.getTile(oldPos)
+  local target = t and (t:getTopUseThing() or t:getGround())
+  if target then pcall(function() useWith(MW_ITEM_ID, target) end) end
 
-  schedule(50, function()
-    wyczyscNapisJesliMW(pos)
-  end)
-end
-
-onPlayerPositionChange(function(newPos, oldPos)
-  if not oldPos then return end
-  if oldPos.z ~= posz() then return end
-  if not toggle:isOn() then return end
-  if not oznaczonyPos then return end
-
-  if oldPos.x ~= oznaczonyPos.x or oldPos.y ~= oznaczonyPos.y or oldPos.z ~= oznaczonyPos.z then
-    return
-  end
-
-  local tile = g_map.getTile(oldPos)
-  if not tile or not tile:isWalkable() then return end
-
-  useWith(MW_ITEM_ID, tile:getTopUseThing())
-
+  if t then pcall(function() t:setText("") end) end
+  ozn = nil
   toggle:setOff()
-  ustawIkone(false)
-
-  wyczyscNapisJesliMW(oldPos)
 end)
 
-mwIcon = addIcon("Mwall Step", {text="MWStep", item={id = MW_ITEM_ID, count = 1}, movable=true}, function(icon, isOn)
-  toggle:setOn(isOn)
-
-  if isOn then
-    local p = pos()
-    local tile = g_map.getTile(p)
-    if tile then
-      tile:setText("MW", "#ff0000")
-      oznaczonyPos = {x = p.x, y = p.y, z = p.z}
-    end
-  else
-    if oznaczonyPos then
-      local t = g_map.getTile(oznaczonyPos)
-      if t then t:setText("") end
-      oznaczonyPos = nil
-    end
-  end
-end)
-
-schedule(1, function()
-  toggle:setOff()
-  ustawIkone(false)
-  if oznaczonyPos then
-    local t = g_map.getTile(oznaczonyPos)
-    if t then t:setText("") end
-    oznaczonyPos = nil
-  end
-end)
+addIcon("Mwall Step", {text="MWSTEP", item={id=MW_ITEM_ID, count=1}}, toggle)
